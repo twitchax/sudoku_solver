@@ -13,7 +13,6 @@ use crossbeam::{
         Receiver
     }
 };
-use parking_lot::RwLock;
 
 #[derive(PartialEq)]
 pub enum DonationResult {
@@ -28,8 +27,8 @@ where
 {
     num_workers: usize,
     workers_registered: Arc<AtomicUsize>,
-    beggar_senders: Arc<RwLock<Vec<Sender<T>>>>,
-    beggar_receivers: Arc<RwLock<Vec<Receiver<T>>>>,
+    beggar_senders: Arc<Vec<Sender<T>>>,
+    beggar_receivers: Arc<Vec<Receiver<T>>>,
     beggar_queue: Arc<ArrayQueue<usize>>
 }
 
@@ -39,24 +38,18 @@ where
 {
     pub fn new(num_workers: usize) -> Self
     {
-        let beggar_senders = Arc::new(RwLock::new(Vec::with_capacity(num_workers)));
-        let beggar_receivers = Arc::new(RwLock::new(Vec::with_capacity(num_workers)));
+        let mut beggar_senders = Vec::with_capacity(num_workers);
+        let mut beggar_receivers = Vec::with_capacity(num_workers);
         let beggar_queue = Arc::new(ArrayQueue::new(num_workers));
-
-        let mut senders = beggar_senders.write();
-        let mut receivers = beggar_receivers.write();
 
         for _ in 0..num_workers {
             let (sender, receiver) = channel::bounded(1);
 
-            senders.push(sender);
-            receivers.push(receiver);
+            beggar_senders.push(sender);
+            beggar_receivers.push(receiver);
         }
 
-        drop(senders);
-        drop(receivers);
-
-        Self { num_workers, workers_registered: Arc::new(AtomicUsize::new(0)), beggar_senders, beggar_receivers, beggar_queue }
+        Self { num_workers, workers_registered: Arc::new(AtomicUsize::new(0)), beggar_senders: Arc::new(beggar_senders), beggar_receivers: Arc::new(beggar_receivers), beggar_queue }
     }
 
     pub fn register(&mut self) -> usize {
@@ -65,13 +58,13 @@ where
 
     pub fn beg_work(&self, id: usize) -> Option<T> {
         match self.beggar_queue.push(id) {
-            Ok(_) => self.beggar_receivers.read()[id].recv().ok(),
+            Ok(_) => self.beggar_receivers[id].recv().ok(),
             _ => None
         }
     }
 
     pub fn donate_work(&self, work: &T) -> DonationResult {
-        match self.beggar_queue.pop().map(|id| self.beggar_senders.read()[id].send(work.clone())) {
+        match self.beggar_queue.pop().map(|id| self.beggar_senders[id].send(work.clone())) {
             Ok(_) => DonationResult::Donated,
             _ => DonationResult::NotDonated
         }
