@@ -40,12 +40,12 @@ impl Sudoku {
         self.matrix[pos]
     }
 
-    pub fn get_at_ref<'a>(&'a self, pos: usize) -> &'a Option<u8> {
+    pub fn get_at_ref(&self, pos: usize) -> &Option<u8> {
         assert!(pos < 81);
         &self.matrix[pos]
     }
 
-    pub fn get_at_mut<'a>(&'a mut self, pos: usize) -> &'a mut Option<u8> {
+    pub fn get_at_mut(&mut self, pos: usize) -> &mut Option<u8> {
         assert!(pos < 81);
         &mut self.matrix[pos]
     }
@@ -54,11 +54,11 @@ impl Sudoku {
         self._get_at(row * 9 + col)
     }
 
-    pub fn get_ref<'a>(&'a self, row: usize, col: usize) -> &'a Option<u8> {
+    pub fn get_ref(&self, row: usize, col: usize) -> &Option<u8> {
         self.get_at_ref(row * 9 + col)
     }
 
-    pub fn get_mut<'a>(&'a mut self, row: usize, col: usize) -> &'a mut Option<u8> {
+    pub fn get_mut(&mut self, row: usize, col: usize) -> &mut Option<u8> {
         self.get_at_mut(row * 9 + col)
     }
 
@@ -89,19 +89,19 @@ impl Sudoku {
         !all_clashes.any(|c| *c == value)
     }
 
-    pub fn iter_row<'a>(&'a self, row: usize) -> impl Iterator<Item = &'a u8> {
+    pub fn iter_row(&self, row: usize) -> impl Iterator<Item = &u8> {
         let indices = (row * 9) .. ((row + 1) * 9);
 
         self.values_from_indices(indices)
     }
 
-    pub fn iter_col<'a>(&'a self, col: usize) -> impl Iterator<Item = &'a u8> {
+    pub fn iter_col(&self, col: usize) -> impl Iterator<Item = &u8> {
         let indices = ( col .. 81 ).step_by(9);
 
         self.values_from_indices(indices)
     }
 
-    pub fn iter_sq<'a>(&'a self, sq: usize) -> impl Iterator<Item = &'a u8> {
+    pub fn iter_sq(&self, sq: usize) -> impl Iterator<Item = &u8> {
         let s = (sq / 3) * 27 + (sq % 3) * 3;
         let indices = 
                   ( (s +  0) .. (s +  0 + 3) )
@@ -119,7 +119,7 @@ impl Sudoku {
         *self.get_mut(row, col) = value;
     }
 
-    fn values_from_indices<'a>(&'a self, indices: impl Iterator<Item = usize>) -> impl Iterator<Item = &'a u8> {
+    fn values_from_indices(& self, indices: impl Iterator<Item = usize>) -> impl Iterator<Item = & u8> {
         // The borrow of `self` is "moved" into the closure here so that the closure will not
         // live longer than the 'a of self borrowed here.
         indices
@@ -140,7 +140,7 @@ impl Display for Sudoku {
 
                 write!(f, "{} ", o)?;
             }
-            write!(f, "\n")?;
+            writeln!(f)?;
         }
 
         Ok(())

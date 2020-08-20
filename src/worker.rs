@@ -1,7 +1,6 @@
 use crossbeam::channel::Sender;
 use log::info;
 use std::sync::{atomic::{Ordering, AtomicU64}, Arc};
-use core_affinity;
 
 use crate::beggar_pool::{
     BeggarPool,
@@ -60,7 +59,7 @@ pub fn test_position<'a>(
     }
 
     // If there is already a number in this square, then continue.
-    if let Some(_) = *sudoku.get_at_ref(pos) {
+    if (*sudoku.get_at_ref(pos)).is_some() {
         return test_position(id, total_ops, counter, sudoku, beggar_pool, pos + 1, success_tx);
     }
 
