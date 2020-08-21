@@ -1,6 +1,6 @@
 #![warn(rust_2018_idioms)]
 #![warn(clippy::all)]
-#![feature(vec_into_raw_parts)]
+//#![feature(vec_into_raw_parts)]
 
 mod beggar_pool;
 mod sudoku;
@@ -28,13 +28,11 @@ fn main() -> Void {
     simple_logger::init().unwrap();
     log::set_max_level(LevelFilter::Info);
 
-    let sudoku_text: String;
-    
-    if args.len() == 2 {
+    let sudoku_text = if args.len() == 2 {
         let sudoku_file = args[1].to_owned();
         let sudoku_file_data = std::fs::read(sudoku_file)?;
         
-        sudoku_text = std::str::from_utf8(&sudoku_file_data)?.to_owned();
+        std::str::from_utf8(&sudoku_file_data)?.to_owned()
     } else {
         let e = "A sudoku file must be passed in.";
         error!("{}", e);

@@ -9,12 +9,14 @@ use std::{
 pub type Void = Result<(), Box<dyn std::error::Error>>;
 pub type Res<T> = Result<T, Box<dyn std::error::Error>>;
 
-pub trait IntoError {
-    fn into_error(self) -> Void;
+pub trait IntoError<T> {
+    fn into_error(self) -> Res<T>;
 }
 
-impl IntoError for &str {
-    fn into_error(self) -> Void {
+impl<T, S> IntoError<T> for S 
+    where S: AsRef<str> + ToString
+{
+    fn into_error(self) -> Res<T> {
         Err(Box::new(GenericError::from(self)))
     }
 }
@@ -24,15 +26,11 @@ pub struct GenericError {
     message: String
 }
 
-impl From<&str> for GenericError {
-    fn from(message: &str) -> Self {
-        GenericError { message: message.to_owned() }
-    }
-}
-
-impl From<String> for GenericError {
-    fn from(message: String) -> Self {
-        GenericError { message }
+impl<T> From<T> for GenericError 
+    where T: AsRef<str> + ToString 
+{
+    fn from(message: T) -> Self {
+        GenericError { message: message.to_string() }
     }
 }
 
