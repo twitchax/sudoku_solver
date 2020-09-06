@@ -40,7 +40,7 @@ fn main() -> Void {
     };
 
     // Parse original sudoku.
-    let sudoku = Sudoku::from(&sudoku_text)?;
+    let sudoku = Sudoku::from_str(&sudoku_text);
     info!("Entered ...\n\n{}", sudoku);
 
     // Create a beggar pool.

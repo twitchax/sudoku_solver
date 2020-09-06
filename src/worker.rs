@@ -59,13 +59,13 @@ pub fn test_position<'a>(
     }
 
     // If there is already a number in this square, then continue.
-    if (*sudoku.get_at_ref(pos)).is_some() {
+    if sudoku.get(pos).is_some() {
         return test_position(id, total_ops, counter, sudoku, beggar_pool, pos + 1, success_tx);
     }
 
     // Iterate through the numbers in this position.
     for k in 1..10 {
-        if sudoku.set_at(pos, k) == SetResult::Set {
+        if sudoku.set(pos, k) == SetResult::Set {
             if *counter % EPOCH_SIZE != 1 || beggar_pool.donate_work(&sudoku) == DonationResult::NotDonated {
                 //info!("[{}] Setting position {} to {}.", id, pos, k);
                 test_position(id, total_ops, counter, sudoku, beggar_pool, pos + 1, success_tx);
@@ -76,5 +76,5 @@ pub fn test_position<'a>(
     }
 
     // If this path was not a success and was exhausted, set this position to none.
-    sudoku.erase_at(pos);
+    sudoku.erase(pos);
 }
