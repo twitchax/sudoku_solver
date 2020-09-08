@@ -24,9 +24,7 @@ pub fn start(to: &Arc<AtomicU64>, bp: &BeggarPool<Sudoku>, stx: &Sender<Sudoku>)
         //log::info!("{} Registered.", id);
 
         core_affinity::set_for_current(core_affinity::CoreId { id });
-
         
-
         // Outer loop asks for work.
         while let Some(mut sudoku) = beggar_pool.beg_work(id) {
             //info!("[{}] Got work.", id);
@@ -36,8 +34,6 @@ pub fn start(to: &Arc<AtomicU64>, bp: &BeggarPool<Sudoku>, stx: &Sender<Sudoku>)
     });
 }
 
-// This is a workaround for the fact that recursive async functions in Rust require a `BoxFuture`.
-// https://rust-lang.github.io/async-book/07_workarounds/05_recursion.html
 pub fn test_position<'a>(
     id: usize,
     total_ops: &'a Arc<AtomicU64>,
@@ -59,7 +55,7 @@ pub fn test_position<'a>(
     }
 
     // If there is already a number in this square, then continue.
-    if sudoku.get(pos).is_some() {
+    if sudoku.has_value(pos) {
         return test_position(id, total_ops, counter, sudoku, beggar_pool, pos + 1, success_tx);
     }
 
