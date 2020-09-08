@@ -9,3 +9,4 @@ simple_logger = "1.6.0"
 log = { version = "0.4.8", features = ["release_max_level_info"] }
 crossbeam = "0.7.3"
 core_affinity = "0.5.10"
+once_cell = "1.4.1"
