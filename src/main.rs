@@ -1,25 +1,25 @@
 #![warn(rust_2018_idioms)]
 #![warn(clippy::all)]
+#![feature(test)]
+//#![feature(core_intrinsics)]
 //#![feature(vec_into_raw_parts)]
 
 mod beggar_pool;
 mod sudoku;
 mod helpers;
 mod worker;
+mod pool;
 
+use std::time::Instant;
 use log::{error, info, LevelFilter};
-use crossbeam::channel;
 
 use sudoku::Sudoku;
-use beggar_pool::{
-    BeggarPool,
-    DonationResult
-};
 use helpers::{
     IntoError,
-    Void
+    Void,
+    Res
 };
-use std::{sync::{atomic::{Ordering, AtomicU64}, Arc}, time::Instant};
+use pool::Pool;
 
 fn main() -> Void {
     let args: Vec<String> = std::env::args().collect();
@@ -28,6 +28,26 @@ fn main() -> Void {
     simple_logger::init().unwrap();
     log::set_max_level(LevelFilter::Info);
 
+    let sudoku = parse_sudoku_from_args(&args)?;
+    info!("Entered ...\n\n{}", sudoku);
+
+    let pool = Pool::new();
+    
+    pool.start(&sudoku);
+
+    let start = Instant::now();
+    let done_sudoku = pool.await_result()?;
+    let elapsed = start.elapsed().as_millis();
+
+    // Print!
+
+    info!("Done!\n\n{}", done_sudoku);
+    info!("Finished in {} ms using {} operations.", elapsed, pool.get_total_ops());
+
+    Ok(())
+}
+
+fn parse_sudoku_from_args(args: &[String]) -> Res<Sudoku> {
     let sudoku_text = if args.len() == 2 {
         let sudoku_file = args[1].to_owned();
         let sudoku_file_data = std::fs::read(sudoku_file)?;
@@ -40,33 +60,29 @@ fn main() -> Void {
     };
 
     // Parse original sudoku.
-    let sudoku = Sudoku::from_str(&sudoku_text);
-    info!("Entered ...\n\n{}", sudoku);
+    Ok(Sudoku::from_str(&sudoku_text))
+}
 
-    // Create a beggar pool.
-    let num_cores = core_affinity::get_core_ids().unwrap().len();
-    let beggar_pool = BeggarPool::<Sudoku>::new(num_cores);
-    let (success_tx, success_rx) = channel::bounded::<Sudoku>(1);
-    let total_ops = Arc::new(AtomicU64::new(0));
+#[allow(unused_extern_crates)]
+extern crate test;
 
-    // Spawn the workers.
-    for _ in 0..num_cores {
-        worker::start(&total_ops, &beggar_pool, &success_tx);
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use test::Bencher;
+
+    #[bench]
+    fn bench_hard_solve(b: &mut Bencher) -> Void {
+        b.iter(|| {
+            let sudoku = parse_sudoku_from_args(&["dummy".to_owned(), "hard.txt".to_owned()])?;
+            let pool = Pool::new();
+
+            pool.start(&sudoku);
+            pool.await_result()?;
+
+            Ok(()) as Void
+        });
+
+        Ok(())
     }
-
-    // Send the initial sudoku to the beggar pool.
-    // Need to loop since work must be donated to a specific "ready" beggar.
-    while beggar_pool.donate_work(&sudoku) == DonationResult::NotDonated {}
-
-    let start = Instant::now();
-
-    // Await success.
-    let done_sudoku = success_rx.recv()?;
-
-    // Print!
-
-    info!("Done!\n\n{}", done_sudoku);
-    info!("Finished in {} ms using {} operations.", start.elapsed().as_millis(), total_ops.fetch_or(0, Ordering::Relaxed));
-
-    Ok(())
 }

@@ -14,7 +14,7 @@ use crossbeam::{
     }
 };
 
-#[derive(PartialEq)]
+#[derive(PartialEq, Debug)]
 pub enum DonationResult {
     Donated,
     NotDonated
@@ -68,5 +68,9 @@ where
             Ok(_) => DonationResult::Donated,
             _ => DonationResult::NotDonated
         }
+    }
+
+    pub fn is_ready(&self) -> bool {
+        !self.beggar_queue.is_empty()
     }
 }
