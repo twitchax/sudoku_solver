@@ -5,6 +5,7 @@
 //#![feature(vec_into_raw_parts)]
 
 mod beggar_pool;
+mod stealer_pool;
 mod sudoku;
 mod helpers;
 mod worker;
@@ -63,11 +64,10 @@ fn parse_sudoku_from_args(args: &[String]) -> Res<Sudoku> {
     Ok(Sudoku::from_str(&sudoku_text))
 }
 
-#[allow(unused_extern_crates)]
-extern crate test;
 
 #[cfg(test)]
 mod tests {
+    extern crate test;
     use super::*;
     use test::Bencher;
 

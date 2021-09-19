@@ -62,7 +62,7 @@ pub fn test_position<'a>(
     // Iterate through the numbers in this position.
     for k in 1..10 {
         if sudoku.set(pos, k) == SetResult::Set {
-            if *counter % EPOCH_SIZE != 1 || beggar_pool.donate_work(&sudoku) == DonationResult::NotDonated {
+            if *counter % EPOCH_SIZE != 1 || beggar_pool.donate_work(sudoku) == DonationResult::NotDonated {
                 //info!("[{}] Setting position {} to {}.", id, pos, k);
                 test_position(id, total_ops, counter, sudoku, beggar_pool, pos + 1, success_tx);
             } else {

@@ -25,7 +25,6 @@ pub struct BeggarPool<T>
 where
     T: Clone
 {
-    num_workers: usize,
     workers_registered: Arc<AtomicUsize>,
     beggar_senders: Arc<Vec<Sender<T>>>,
     beggar_receivers: Arc<Vec<Receiver<T>>>,
@@ -49,7 +48,7 @@ where
             beggar_receivers.push(receiver);
         }
 
-        Self { num_workers, workers_registered: Arc::new(AtomicUsize::new(0)), beggar_senders: Arc::new(beggar_senders), beggar_receivers: Arc::new(beggar_receivers), beggar_queue }
+        Self { workers_registered: Arc::new(AtomicUsize::new(0)), beggar_senders: Arc::new(beggar_senders), beggar_receivers: Arc::new(beggar_receivers), beggar_queue }
     }
 
     pub fn register(&mut self) -> usize {

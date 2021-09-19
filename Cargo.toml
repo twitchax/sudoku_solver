@@ -2,7 +2,7 @@
 name = "sudoku_solver"
 version = "0.0.1"
 authors = ["Aaron Roney <twitchax>"]
-edition = "2018"
+edition = "2021"
 
 [dependencies]
 simple_logger = "1.6.0"
