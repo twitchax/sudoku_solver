@@ -1,5 +1,11 @@
 use std::{fmt::{Formatter, Display}};
+use log::{debug, info};
 use once_cell::sync::Lazy;
+
+// TODO:
+//   * Add a "constraint level" member to the map.
+//   * Update constraint level for only the cells that would change when a value is set.
+//   * Fix sort to merely swap the newly set constraint level with "one less than" the new level of that cell.
 
 #[derive(PartialEq)]
 pub enum SetResult {
@@ -7,15 +13,21 @@ pub enum SetResult {
     NotSet
 }
 
-type SudokuMatrix = Box<[u8; 81]>;
-type ConstraintTable = Box<[[bool; 10]; 9]>;
-type RowColSqArray = [(usize, usize, usize); 81];
+type SudokuMatrix = [u8; 81];
+type ConstraintTable = [[u8; 10]; 9]; // NOTE: This has an inner size of 16 to allow for SIMD u8x16; the space difference is negligible.
+type RowColSqMap = [(usize, usize, usize); 81];
+type AreaToIndexArrayMap = [[usize; 9]; 9];
+
+use rayon::prelude::*;
+use core_simd::*;
 
 // [ARoney] NOTE: The inner arrays for the constraint table are 10 since the arrays likely have to be aligned anyway.
 // That way, no need to compute the correct entry with a `-1` every time.
 pub struct Sudoku {
     matrix: SudokuMatrix,
     constraint_order: SudokuMatrix,
+    constraint_level: SudokuMatrix,
+    available_values: ConstraintTable,
     row_constraint_table: ConstraintTable,
     col_constraint_table: ConstraintTable,
     sq_constraint_table: ConstraintTable,
@@ -31,14 +43,17 @@ impl Clone for Sudoku {
 
 impl Sudoku {
     pub fn from_str(s: &str) -> Self {
-        let matrix = Box::new([0; 81]);
-        let constraint_order = Box::new([0; 81]);
+        let matrix = [0; 81];
+        let constraint_order = [0; 81];
+        let constraint_level = [0; 81];
 
-        let row_constraint_table = Box::new([[false; 10]; 9]);
-        let col_constraint_table = Box::new([[false; 10]; 9]);
-        let sq_constraint_table = Box::new([[false; 10]; 9]);
+        let available_values = ConstraintTable::default();
 
-        let mut sudoku = Self { matrix, constraint_order, row_constraint_table, col_constraint_table, sq_constraint_table };
+        let row_constraint_table = ConstraintTable::default();
+        let col_constraint_table = ConstraintTable::default();
+        let sq_constraint_table = ConstraintTable::default();
+ 
+        let mut sudoku = Self { matrix, constraint_order, constraint_level, available_values, row_constraint_table, col_constraint_table, sq_constraint_table };
         
         // Prepare the matrix.
         for (k, entry_string) in s.split_whitespace().enumerate() {
@@ -53,16 +68,28 @@ impl Sudoku {
         }
 
         // Order the cell indices by constraint-amount, from most to least.
+        sudoku.compute_original_constraint_level();
         sudoku.update_constraint_order();
 
         sudoku
     }
 
+    fn compute_original_constraint_level(&mut self) {
+        // for (k, _) in self.matrix.iter().enumerate() {
+        //     self.constraint_level[k] = self.constraint_level_at(k)
+        // }
+    }
+
     pub fn update_constraint_order(&mut self) {
-        let mut index_constraint_pairs = self.matrix.iter().enumerate().map(|(i, _)| {
+        let mut index_constraint_pairs = [(0u8, 0u8); 81];
+        self.matrix.iter().enumerate().map(|(i, _)| {
             let constraint = self.constraint_level_at(i);
             (i as u8, constraint)
-        }).collect::<Vec<(u8, u8)>>();
+        }).for_each(|p| index_constraint_pairs[p.0 as usize] = p);
+
+        // let mut index_constraint_pairs = [(0u8, 0u8); 81];
+        // self.constraint_level.iter().enumerate().map(|(i, entry)| (i, entry))
+        //     .for_each(|p| index_constraint_pairs[p.0] = (p.0 as u8, *p.1));
 
         index_constraint_pairs.sort_unstable_by(|a, b| b.1.cmp(&a.1));
 
@@ -114,29 +141,29 @@ impl Sudoku {
 
         let num = value as usize;
 
-        !self.row_constraint_table[row][num] && !self.col_constraint_table[col][num] && !self.sq_constraint_table[sq][num]
+        self.row_constraint_table[row][num] != 1 && self.col_constraint_table[col][num] != 1 && self.sq_constraint_table[sq][num] != 1
     }
 
     fn unchecked_set_at(&mut self, pos: usize, value: u8) {
         let location = &mut self.matrix[pos];
+        let (row, col, sq) = ROW_COL_SQ_MAP[pos];
+
         // If there was an old value, clean up the table items for that cell.
         if *location > 0 {
-            let (row, col, sq) = ROW_COL_SQ_MAP[pos];
             let num = *location as usize;
 
-            self.row_constraint_table[row][num] = false;
-            self.col_constraint_table[col][num] = false;
-            self.sq_constraint_table[sq][num] = false;
+            self.row_constraint_table[row][num] = 0;
+            self.col_constraint_table[col][num] = 0;
+            self.sq_constraint_table[sq][num] = 0;
         }
         
         // If there is a new value, set the table items for that cell.
         if value > 0 {
-            let (row, col, sq) = ROW_COL_SQ_MAP[pos];
             let num = value as usize;
 
-            self.row_constraint_table[row][num] = true;
-            self.col_constraint_table[col][num] = true;
-            self.sq_constraint_table[sq][num] = true;
+            self.row_constraint_table[row][num] = 1;
+            self.col_constraint_table[col][num] = 1;
+            self.sq_constraint_table[sq][num] = 1;
         }
 
         *location = value;
@@ -149,19 +176,38 @@ impl Sudoku {
         }
 
         let (row, col, sq) = ROW_COL_SQ_MAP[pos];
+
+        let s = u8x16::splat_apply(0, self.sq_constraint_table[sq]);
+        let r = u8x16::splat_apply(0, self.row_constraint_table[row]);
+        let c = u8x16::splat_apply(0, self.col_constraint_table[col]);
         
-        let mut sum = 0;
-        for k in 1..10 {
-            if self.row_constraint_table[row][k] || self.col_constraint_table[col][k] || self.sq_constraint_table[sq][k] {
-                sum += 1;
-            }
-        }
-        
-        sum
+        (s | r | c).horizontal_sum()
     }
 
     fn memberwise_clone(&self) -> Self {
-        Self { matrix: self.matrix.clone(), constraint_order: self.constraint_order.clone(), row_constraint_table: self.row_constraint_table.clone(), col_constraint_table: self.col_constraint_table.clone(), sq_constraint_table: self.sq_constraint_table.clone() }
+        Self { matrix: self.matrix, constraint_order: self.constraint_order, constraint_level: self.constraint_level, available_values: self.available_values, row_constraint_table: self.row_constraint_table, col_constraint_table: self.col_constraint_table, sq_constraint_table: self.sq_constraint_table }
+    }
+}
+
+trait SplatApply<T, const LANES: usize>
+where
+    T: SimdElement,
+    LaneCount<LANES>: SupportedLaneCount
+{
+    fn splat_apply<const L: usize>(default: T, array: [T; L]) -> Self;
+}
+
+impl<T, const LANES: usize> SplatApply<T, LANES> for Simd<T, LANES>
+where
+    T: SimdElement,
+    LaneCount<LANES>: SupportedLaneCount
+{
+    #[inline(always)]
+    fn splat_apply<const L: usize>(default: T, array: [T; L]) -> Self {
+        let mut result = Self::splat(default);
+        array.iter().enumerate().for_each(|(i, &v)| result[i] = v);
+
+        result
     }
 }
 
@@ -178,7 +224,8 @@ impl Display for Sudoku {
     }
 }
 
-static ROW_COL_SQ_MAP: Lazy<RowColSqArray> = Lazy::new(|| {
+/// Static map from sudoku global position to row, col, and square positions.
+static ROW_COL_SQ_MAP: Lazy<RowColSqMap> = Lazy::new(|| {
     let mut row_col_sq_map = [(0, 0, 0); 81];
 
     for (k, v) in row_col_sq_map.iter_mut().enumerate() {
@@ -191,3 +238,45 @@ static ROW_COL_SQ_MAP: Lazy<RowColSqArray> = Lazy::new(|| {
 
     row_col_sq_map
 });
+
+// static ROW_INDEXES_MAP: Lazy<AreaToIndexArrayMap> = Lazy::new(|| {
+//     let mut row_index_map = [[0; 9]; 9];
+
+//     for (k, v) in row_index_map.iter_mut().enumerate() {
+//         let indexes = (k * 9 .. (k + 1) * 9).collect::<Vec<_>>().try_into().expect("Could not concert Vec to array.");
+
+//         *v = indexes;
+//     }
+
+//     row_index_map
+// });
+
+// static COL_INDEXES_MAP: Lazy<AreaToIndexArrayMap> = Lazy::new(|| {
+//     let mut col_index_map = [[0; 9]; 9];
+
+//     for (k, v) in col_index_map.iter_mut().enumerate() {
+//         let indexes = (k .. k + 72).step_by(9).collect::<Vec<_>>().try_into().expect("Could not concert Vec to array.");
+
+//         *v = indexes;
+//     }
+
+//     col_index_map
+// });
+
+// static SQ_INDEXES_MAP: Lazy<AreaToIndexArrayMap> = Lazy::new(|| {
+//     let mut row_index_map = [[0; 9]; 9];
+
+//     for (k, v) in row_index_map.iter_mut().enumerate() {
+//         let upper_left_index = (k / 3) * 27 + (k % 3) * 3;
+
+
+//         let top = (k * 9 .. (k + 1) * 9).collect::<Vec<_>>().try_into().expect("Could not concert Vec to array.");
+
+
+//         let indexes = .step_by(9).collect::<Vec<_>>().try_into().expect("Could not concert Vec to array.");
+
+//         *v = indexes;
+//     }
+
+//     row_index_map
+// });

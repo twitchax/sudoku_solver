@@ -1,15 +1,16 @@
 #![warn(rust_2018_idioms)]
 #![warn(clippy::all)]
+#![feature(portable_simd)]
 #![feature(test)]
 //#![feature(core_intrinsics)]
 //#![feature(vec_into_raw_parts)]
 
-mod beggar_pool;
-mod stealer_pool;
+mod rayon_worker;
+//mod beggar_pool;
 mod sudoku;
 mod helpers;
-mod worker;
-mod pool;
+//mod worker;
+//mod pool;
 
 use std::time::Instant;
 use log::{error, info, LevelFilter};
@@ -20,7 +21,6 @@ use helpers::{
     Void,
     Res
 };
-use pool::Pool;
 
 fn main() -> Void {
     let args: Vec<String> = std::env::args().collect();
@@ -32,18 +32,15 @@ fn main() -> Void {
     let sudoku = parse_sudoku_from_args(&args)?;
     info!("Entered ...\n\n{}", sudoku);
 
-    let pool = Pool::new();
-    
-    pool.start(&sudoku);
-
     let start = Instant::now();
-    let done_sudoku = pool.await_result()?;
-    let elapsed = start.elapsed().as_millis();
+    let (done_sudoku, total_ops) = rayon_worker::solve(sudoku);
+
+    let elapsed = start.elapsed().as_micros();
 
     // Print!
 
     info!("Done!\n\n{}", done_sudoku);
-    info!("Finished in {} ms using {} operations.", elapsed, pool.get_total_ops());
+    info!("Finished in {} μs using {} operations.", elapsed, total_ops);
 
     Ok(())
 }
@@ -64,7 +61,6 @@ fn parse_sudoku_from_args(args: &[String]) -> Res<Sudoku> {
     Ok(Sudoku::from_str(&sudoku_text))
 }
 
-
 #[cfg(test)]
 mod tests {
     extern crate test;
@@ -75,10 +71,8 @@ mod tests {
     fn bench_hard_solve(b: &mut Bencher) -> Void {
         b.iter(|| {
             let sudoku = parse_sudoku_from_args(&["dummy".to_owned(), "hard.txt".to_owned()])?;
-            let pool = Pool::new();
-
-            pool.start(&sudoku);
-            pool.await_result()?;
+            
+            let _ = rayon_worker::solve(sudoku);
 
             Ok(()) as Void
         });
