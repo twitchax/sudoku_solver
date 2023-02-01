@@ -14,7 +14,7 @@ pub fn solve(mut sudoku: Sudoku) -> (Sudoku, u64) {
     let total_ops_clone = total_ops.clone();
     
     rayon::scope(move |s: &Scope<'_>| {
-        test_position(&total_ops, &mut sudoku, s, 0, &success_tx);
+        test_position(&total_ops, &mut sudoku, s, &success_tx);
     });
     
     let result = success_rx.recv().unwrap();
@@ -26,36 +26,35 @@ pub fn solve(mut sudoku: Sudoku) -> (Sudoku, u64) {
 pub fn test_position<'s>(
     total_ops: &Arc<AtomicU64>,
     sudoku: &mut Sudoku, 
-    scope: &Scope<'s>, 
-    pos: usize, 
+    scope: &Scope<'s>,
     success_tx: &Sender<Sudoku>
 ) {
     // Increment counter.
     total_ops.fetch_add(1, Ordering::Relaxed);
 
     // Check for success criteria.
-    if pos == 81 {
+    // The sudoku positions are _always_ sorted in most constrained to
+    // least constrained order.  If the 0th position is set, then we're done!
+    if sudoku.has_value(0) {
         info!("Found the solution!");
         let _ = success_tx.clone().send(sudoku.clone());
         return;
     }
 
-    // If there is already a number in this square, then continue.
-    if sudoku.has_value(pos) {
-        return test_position(total_ops, sudoku, scope, pos + 1, success_tx);
-    }
-
     // Iterate through the numbers in this position.
-    for k in 1..10 {
-        if sudoku.set(pos, k) == SetResult::Set {
-            let total_ops_clone = total_ops.clone();
-            let mut sudoku_clone = sudoku.clone();
-            let success_tx_clone = success_tx.clone();
+    let can_place = sudoku.can_place_what(0);
 
-            scope.spawn(move |s1| {
-                // Always start at position 0 since cloning the sudoku resorts the desired order.
-                test_position(&total_ops_clone, &mut sudoku_clone, s1, 0, &success_tx_clone);
-            });
-        }
+    for num in can_place[1..10].iter().filter(|n| **n != 0) {
+        let total_ops_clone = total_ops.clone();
+        let mut sudoku_clone = sudoku.clone();
+        let success_tx_clone = success_tx.clone();
+
+        sudoku_clone.unchecked_set(0, *num);
+        sudoku_clone.update_constraint_order();
+
+        scope.spawn(move |s1| {
+            // Always start at position 0 since cloning the sudoku to the desired order.
+            test_position(&total_ops_clone, &mut sudoku_clone, s1, &success_tx_clone);
+        });
     }
 }

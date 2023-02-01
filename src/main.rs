@@ -24,6 +24,7 @@ use helpers::{
 
 fn main() -> Void {
     let args: Vec<String> = std::env::args().collect();
+    //rayon::ThreadPoolBuilder::new().num_threads(1).build_global().unwrap();
 
     // Set the log level.
     simple_logger::init().unwrap();
