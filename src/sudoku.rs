@@ -14,7 +14,7 @@ pub enum SetResult {
 }
 
 type SudokuMatrix = [u8; 81];
-type ConstraintTable = [[u8; 10]; 9]; // NOTE: This has an inner size of 16 to allow for SIMD u8x16; the space difference is negligible.
+type ConstraintTable = [[u8; 16]; 9]; // NOTE: This has an inner size of 16 to allow for SIMD u8x16; the space difference is negligible.
 type RowColSqMap = [(usize, usize, usize); 81];
 type AreaToIndexArrayMap = [[usize; 9]; 9];
 
@@ -164,9 +164,9 @@ impl Sudoku {
 
         let max_less_one = u8x16::splat(254);
         
-        let s = u8x16::splat_apply(0, self.sq_constraint_table[sq]);
-        let r = u8x16::splat_apply(0, self.row_constraint_table[row]);
-        let c = u8x16::splat_apply(0, self.col_constraint_table[col]);
+        let s = u8x16::from_array(self.sq_constraint_table[sq]);
+        let r = u8x16::from_array(self.row_constraint_table[row]);
+        let c = u8x16::from_array(self.col_constraint_table[col]);
 
         let lane_nums = u8x16::from_array([0u8, 1u8, 2u8, 3u8, 4u8, 5u8, 6u8, 7u8, 8u8, 9u8, 0u8, 0u8, 0u8, 0u8, 0u8, 0u8]);
 
@@ -212,9 +212,9 @@ impl Sudoku {
 
         let (row, col, sq) = ROW_COL_SQ_MAP[pos];
 
-        let s = u8x16::splat_apply(0, self.sq_constraint_table[sq]);
-        let r = u8x16::splat_apply(0, self.row_constraint_table[row]);
-        let c = u8x16::splat_apply(0, self.col_constraint_table[col]);
+        let s = u8x16::from_array(self.sq_constraint_table[sq]);
+        let r = u8x16::from_array(self.row_constraint_table[row]);
+        let c = u8x16::from_array(self.col_constraint_table[col]);
         
         (s | r | c).horizontal_sum()
     }

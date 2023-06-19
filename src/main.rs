@@ -24,14 +24,14 @@ use helpers::{
 
 fn main() -> Void {
     let args: Vec<String> = std::env::args().collect();
-    //rayon::ThreadPoolBuilder::new().num_threads(1).build_global().unwrap();
+    rayon::ThreadPoolBuilder::new().num_threads(32).build_global().unwrap();
 
     // Set the log level.
-    simple_logger::init().unwrap();
-    log::set_max_level(LevelFilter::Info);
+    //simple_logger::init().unwrap();
+    //log::set_max_level(LevelFilter::Info);
 
     let sudoku = parse_sudoku_from_args(&args)?;
-    info!("Entered ...\n\n{}", sudoku);
+    println!("Entered ...\n\n{}", sudoku);
 
     let start = Instant::now();
     let (done_sudoku, total_ops) = rayon_worker::solve(sudoku);
@@ -40,8 +40,8 @@ fn main() -> Void {
 
     // Print!
 
-    info!("Done!\n\n{}", done_sudoku);
-    info!("Finished in {} μs using {} operations.", elapsed, total_ops);
+    println!("Done!\n\n{}", done_sudoku);
+    println!("Finished in {} μs using {} operations.", elapsed, total_ops);
 
     Ok(())
 }
